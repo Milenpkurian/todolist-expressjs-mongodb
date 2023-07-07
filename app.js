@@ -1,54 +1,68 @@
 import express from "express";
 import bodyParser from "body-parser";
+import _ from "lodash";
 
 import * as date from "./date.js";
+import { saveItem, displayItem, deleteItem } from "./defaultList.js";
+import * as custom from "./customList.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
-const items = ["Buy Food", "Cook Food", "Eat Food"];
-const workItems = [];
+let items = [];
+const currentDay = date.getDate();
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
 app.set("view engine", "ejs");
 
-app.get("/", (_req, res) => {
-  const currentDay = date.getDate();
+app.get("/", async (_req, res) => {
+  items = await displayItem();
   const context = {
     listTitle: currentDay,
-    newListItems: items,
+    listItems: items,
   };
-
   res.render("list", context);
 });
 
-app.get("/work", (_req, res) => {
-  const context = {
-    listTitle: "Work List",
-    newListItems: workItems,
-  };
-
-  res.render("list", context);
-});
-
-app.get("/about", (_req, res) => {
-  res.render("about");
-});
-
-app.post("/", (req, res) => {
-  const item = req.body.newItem;
-
-  if (item) {
-    if (req.body.list === "Work List") {
-      workItems.push(item);
-      res.redirect("/work");
-    } else {
-      items.push(item);
-      res.redirect("/");
-    }
+app.get("/custom/:customName", async (req, res) => {
+  const customName = _.capitalize(req.params.customName.trim());
+  // console.log(customName);
+  const exist = await custom.ifCustomExist(customName);
+  if (exist) {
+    const foundList = await custom.displayItem(customName);
+    const context = {
+      listTitle: foundList.name,
+      listItems: foundList.items,
+    };
+    res.render("list", context);
+  } else {
+    await custom.createList(customName);
+    res.redirect("/custom/" + customName);
   }
+});
 
-  // console.log(req.body);
+app.post("/", async (req, res) => {
+  const newItem = req.body.newItem;
+  const listTitle = req.body.listTitle.trim();
+  if (listTitle == currentDay) {
+    await saveItem(newItem);
+    res.redirect("/");
+  } else {
+    await custom.saveItem(listTitle, newItem);
+    res.redirect("/custom/" + listTitle);
+  }
+});
+
+app.post("/delete", async (req, res) => {
+  const itemId = req.body.itemId.trim();
+  const listTitle = req.body.listTitle.trim();
+  if (listTitle == currentDay) {
+    await deleteItem(itemId);
+    res.redirect("/");
+  } else {
+    await custom.deleteItem(listTitle, itemId);
+    res.redirect("/custom/" + listTitle);
+  }
 });
 
 app.listen(port, () => {
